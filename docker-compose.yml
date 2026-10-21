@@ -7,8 +7,8 @@ services:
   database:
     << : *restart_policy
     image: postgres:11.7-alpine
-    logging:
-      driver: none
+    networks:
+      - default
     environment:
       POSTGRES_USER: main
       POSTGRES_PASSWORD: main
@@ -18,9 +18,11 @@ services:
 
   app:
     << : *restart_policy
-    image: buddy/repman:1.3.4
+    build: .
     sysctls:
       net.core.somaxconn: 2048
+    networks:
+      - default
     command: >
       bash -c 'bin/console d:m:m --no-interaction &&
       bin/console messenger:setup-transports --no-interaction &&
@@ -39,6 +41,8 @@ services:
     << : *restart_policy
     image: buddy/repman:1.3.4
     command: ['bin/console', 'messenger:consume', 'async', '--limit=500']
+    networks:
+      - default
     env_file: .env.docker
     volumes:
       - app-var:/app/var
@@ -51,6 +55,8 @@ services:
     image: buddy/repman:1.3.4
     command: ['crond', '-f', '-L', '/app/var/log/cron.log']
     env_file: .env.docker
+    networks:
+      - default
     volumes:
       - app-var:/app/var
       - /app/var/cache
@@ -62,20 +68,21 @@ services:
     << : *restart_policy
     image: nginx:1.17-alpine
     env_file: .env.docker
-    command: ['/nginx/start.sh']
-    ports:
-      - 443:443
     depends_on:
       - app
     volumes:
       - app-public:/app/public
       - docker-logs-nginx:/var/log/nginx
-      - docker-nginx-scripts:/nginx
       - docker-nginx-ssl-certs:/etc/ssl/certs
       - docker-nginx-ssl-private:/etc/ssl/private
 
 volumes:
   postgres-data:
+    driver: local
+    driver_opts:
+      type: none
+      device: $PWD/var/postgres
+      o: bind
   app-var:
     driver: local
     driver_opts:
