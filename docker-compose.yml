@@ -21,6 +21,7 @@ services:
   app:
     << : *common
     build: .
+    image: repman-softizy:local
     sysctls:
       net.core.somaxconn: 2048
     networks:
@@ -43,7 +44,8 @@ services:
 
   consumer:
     << : *common
-    image: buddy/repman:1.4.0
+    image: repman-softizy:local
+    pull_policy: never
     command: ['bin/console', 'messenger:consume', 'async', '--limit=500']
     networks:
       - default
@@ -58,7 +60,8 @@ services:
 
   cron:
     << : *common
-    image: buddy/repman:1.4.0
+    image: repman-softizy:local
+    pull_policy: never
     command: ['crond', '-f', '-L', '/app/var/log/cron.log']
     env_file:
       - .env.docker
@@ -74,10 +77,8 @@ services:
 
   nginx:
     << : *common
-    image: nginx:1.17-alpine
-    env_file:
-      - .env.docker
-      - .env.docker.local
+    image: nginx:1.30-alpine
+    env_file: .env.docker
     depends_on:
       - app
     volumes:
@@ -91,7 +92,7 @@ volumes:
     driver: local
     driver_opts:
       type: none
-      device: $PWD/var/postgres
+      device: $PWD/var/postgres17
       o: bind
   app-var:
     driver: local
