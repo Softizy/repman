@@ -96,6 +96,11 @@ parameters:
 			path: tests/Doubles/GitLabOAuth.php
 
 		-
+			message: "#^Service \"Buddy\\\\Repman\\\\Tests\\\\Doubles\\\\HttpClientStub\" is private\\.$#"
+			count: 1
+			path: tests/Doubles/GoogleOAuth.php
+
+		-
 			message: "#^PHPDoc tag @var has invalid value \\(ResponseInterface\\[\\];\\)\\: Unexpected token \";\", expected TOKEN_HORIZONTAL_WS at offset 35$#"
 			count: 1
 			path: tests/Doubles/HttpClientStub.php

@@ -4,6 +4,8 @@
 /ansible
 /docker
 !/docker/nginx/cert
+!/docker/php
+/.env.*.local
 /tests
 /var/*
 

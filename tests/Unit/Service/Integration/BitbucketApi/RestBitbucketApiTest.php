@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Buddy\Repman\Tests\Unit\Service\Integration\BitbucketApi;
 
+use Bitbucket\Api\AbstractApi;
 use Bitbucket\Api\CurrentUser;
 use Bitbucket\Api\Repositories as RepositoriesApi;
 use Bitbucket\Client;
@@ -11,6 +12,7 @@ use Bitbucket\ResultPagerInterface;
 use Buddy\Repman\Service\Integration\BitbucketApi\Repositories;
 use Buddy\Repman\Service\Integration\BitbucketApi\Repository;
 use Buddy\Repman\Service\Integration\BitbucketApi\RestBitbucketApi;
+use Buddy\Repman\Service\Integration\BitbucketApi\UserWorkspaces;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 
@@ -76,26 +78,97 @@ final class RestBitbucketApiTest extends TestCase
         $this->api->primaryEmail('token');
     }
 
-    public function testFetchRepositories(): void
+    /**
+     * Every workspace has to be asked separately: the endpoint that answered for all of
+     * them at once was withdrawn by Bitbucket (CHANGE-2770), so a user whose
+     * repositories live in more than one workspace is the case that matters here.
+     *
+     * @dataProvider workspaceListingShapeProvider
+     *
+     * @param mixed[] $workspaceListing
+     */
+    public function testFetchRepositoriesFromEveryWorkspace(array $workspaceListing): void
     {
-        $this->pagerMock->method('fetchAll')->willReturn([
-            [
-                'uuid' => '099acebd-5158-459e-b05c-30e51b49a1a8',
-                'full_name' => 'repman/left-pad',
-                'links' => ['html' => ['href' => 'https://gitlab.com/repman/left-pad']],
-            ],
-            [
-                'uuid' => '74fb57b9-0820-4165-bba0-892eef8f69b8',
-                'full_name' => 'repman/right-pad',
-                'links' => ['html' => ['href' => 'https://gitlab.com/repman/right-pad']],
-            ],
-        ]);
-        $this->clientMock->method('repositories')->willReturn($this->createMock(RepositoriesApi::class));
+        $workspaceApis = [
+            'repman' => $this->createMock(RepositoriesApi\Workspaces::class),
+            'other-team' => $this->createMock(RepositoriesApi\Workspaces::class),
+        ];
+
+        $repos = $this->createMock(RepositoriesApi::class);
+        $repos->method('workspaces')->willReturnCallback(
+            fn (string $slug): RepositoriesApi\Workspaces => $workspaceApis[$slug]
+        );
+        $this->clientMock->method('repositories')->willReturn($repos);
+
+        $this->pagerMock->method('fetchAll')->willReturnCallback(
+            function (AbstractApi $api, string $method, array $parameters = []) use ($workspaceApis, $workspaceListing): array {
+                if ($api instanceof UserWorkspaces) {
+                    // unfiltered: a role filter here would drop workspaces whose
+                    // repositories are still reachable
+                    self::assertSame([], $parameters);
+
+                    return $workspaceListing;
+                }
+
+                self::assertSame([['role' => 'member']], $parameters);
+
+                if ($api === $workspaceApis['repman']) {
+                    return [[
+                        'uuid' => '099acebd-5158-459e-b05c-30e51b49a1a8',
+                        'full_name' => 'repman/left-pad',
+                        'links' => ['html' => ['href' => 'https://bitbucket.org/repman/left-pad']],
+                    ]];
+                }
+
+                return [[
+                    'uuid' => '74fb57b9-0820-4165-bba0-892eef8f69b8',
+                    'full_name' => 'other-team/right-pad',
+                    'links' => ['html' => ['href' => 'https://bitbucket.org/other-team/right-pad']],
+                ]];
+            }
+        );
 
         self::assertEquals(new Repositories([
-            new Repository('099acebd-5158-459e-b05c-30e51b49a1a8', 'repman/left-pad', 'https://gitlab.com/repman/left-pad.git'),
-            new Repository('74fb57b9-0820-4165-bba0-892eef8f69b8', 'repman/right-pad', 'https://gitlab.com/repman/right-pad.git'),
+            new Repository('099acebd-5158-459e-b05c-30e51b49a1a8', 'repman/left-pad', 'https://bitbucket.org/repman/left-pad.git'),
+            new Repository('74fb57b9-0820-4165-bba0-892eef8f69b8', 'other-team/right-pad', 'https://bitbucket.org/other-team/right-pad.git'),
         ]), $this->api->repositories('token'));
+    }
+
+    /**
+     * Atlassian's documentation for the replacement endpoint does not say which of
+     * these it answers with, and the endpoints it replaced used one each.
+     *
+     * @return mixed[]
+     */
+    public function workspaceListingShapeProvider(): array
+    {
+        return [
+            'workspaces' => [[
+                ['slug' => 'repman'],
+                ['slug' => 'other-team'],
+            ]],
+            'memberships carrying a workspace' => [[
+                ['permission' => 'owner', 'workspace' => ['slug' => 'repman']],
+                ['permission' => 'member', 'workspace' => ['slug' => 'other-team']],
+            ]],
+        ];
+    }
+
+    public function testEntryWithoutAWorkspaceSlugIsSkipped(): void
+    {
+        $this->clientMock->expects(self::never())->method('repositories');
+        $this->pagerMock->method('fetchAll')->willReturn([['permission' => 'member'], 'nonsense']);
+
+        self::assertEquals(new Repositories([]), $this->api->repositories('token'));
+    }
+
+    public function testFetchRepositoriesWhenUserBelongsToNoWorkspace(): void
+    {
+        // nothing to ask about, so the repositories endpoint is never reached
+        $this->clientMock->expects(self::never())->method('repositories');
+        $this->pagerMock->method('fetchAll')->willReturn([]);
+
+        self::assertEquals(new Repositories([]), $this->api->repositories('token'));
     }
 
     public function testAddHookWhenNotExist(): void

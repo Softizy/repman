@@ -1,4 +1,7 @@
 knpu_oauth2_client:
+    # a bare Guzzle client - what the providers build for themselves - has no timeouts at
+    # all, and a token refresh runs while holding a row lock on the token
+    http_client: oauth.http_client
     clients:
         github:
             type: github
@@ -30,3 +33,9 @@ knpu_oauth2_client:
             redirect_route: register_buddy_check
             redirect_params: {}
             use_state: true
+        google:
+            type: google
+            client_id: '%env(OAUTH_GOOGLE_CLIENT_ID)%'
+            client_secret: '%env(OAUTH_GOOGLE_CLIENT_SECRET)%'
+            redirect_route: register_google_check
+            redirect_params: {}
