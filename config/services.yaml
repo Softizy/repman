@@ -96,6 +96,10 @@ services:
         arguments:
             $allowedTypes: '%env(csv:APP_ALLOWED_PACKAGE_TYPES)%'
 
+    Buddy\Repman\Security\GoogleAccount:
+        arguments:
+            $hostedDomain: '%env(OAUTH_GOOGLE_HOSTED_DOMAIN)%'
+
     Buddy\Repman\Service\Twig\OAuthProviderExtension:
         arguments:
             -

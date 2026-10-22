@@ -5,7 +5,8 @@ declare(strict_types=1);
 namespace Buddy\Repman\Security;
 
 use KnpU\OAuth2ClientBundle\Client\ClientRegistry;
-use KnpU\OAuth2ClientBundle\Client\Provider\GoogleClient;
+use KnpU\OAuth2ClientBundle\Security\Exception\IdentityProviderAuthenticationException;
+use League\OAuth2\Client\Provider\Exception\IdentityProviderException;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\RouterInterface;
 use Symfony\Component\Security\Core\User\UserInterface;
@@ -15,12 +16,12 @@ use Symfony\Component\Security\Http\Authenticator\Passport\SelfValidatingPasspor
 
 final class GoogleAuthenticator extends OAuthAuthenticator
 {
-    private GoogleClient $googleClient;
+    private GoogleAccount $googleAccount;
 
-    public function __construct(ClientRegistry $clientRegistry, GoogleClient $googleClient, RouterInterface $router, UserProvider $userProvider)
+    public function __construct(ClientRegistry $clientRegistry, GoogleAccount $googleAccount, RouterInterface $router, UserProvider $userProvider)
     {
         $this->clientRegistry = $clientRegistry;
-        $this->googleClient = $googleClient;
+        $this->googleAccount = $googleAccount;
         $this->userProvider = $userProvider;
         $this->router = $router;
     }
@@ -32,7 +33,11 @@ final class GoogleAuthenticator extends OAuthAuthenticator
 
     public function authenticate(Request $request): PassportInterface
     {
-        $email = $this->googleClient->fetchUserFromToken($this->fetchAccessToken($this->clientRegistry->getClient('google'), $request->attributes->get('_route')))->getEmail();
+        try {
+            $email = $this->googleAccount->email($this->fetchAccessToken($this->clientRegistry->getClient('google'), $request->attributes->get('_route')));
+        } catch (IdentityProviderException $e) {
+            throw new IdentityProviderAuthenticationException($e);
+        }
         $user = $this->userProvider->loadUserByIdentifier($email);
 
         return new SelfValidatingPassport(new UserBadge($email, function () use ($user): UserInterface {

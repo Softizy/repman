@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Buddy\Repman\Controller\OAuth;
 
-use KnpU\OAuth2ClientBundle\Client\Provider\GoogleClient;
+use Buddy\Repman\Security\GoogleAccount;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Annotation\Route;
@@ -38,19 +38,19 @@ final class GoogleController extends OAuthController
                 'https://www.googleapis.com/auth/userinfo.email',
                 'https://www.googleapis.com/auth/userinfo.profile',
             ], ['redirect_uri' => $this->generateUrl('login_google_check', [], UrlGeneratorInterface::ABSOLUTE_URL)])
-            ;
+        ;
     }
 
     /**
      * @Route("/register/google/check", name="register_google_check", methods={"GET"})
      */
-    public function registerCheck(Request $request, GoogleClient $api): Response
+    public function registerCheck(Request $request, GoogleAccount $account): Response
     {
         $this->ensureOAuthRegistrationIsEnabled();
 
         return $this->createAndAuthenticateUser(
             'google',
-            fn () => $api->fetchUserFromToken($this->oauth->getClient('google')->getAccessToken()->getToken()),
+            fn () => $account->email($this->oauth->getClient('google')->getAccessToken()),
             $request
         );
     }
